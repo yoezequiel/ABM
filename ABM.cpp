@@ -3,24 +3,21 @@
 
 using namespace std;
 
-// Definición de la estructura Usuario
 struct Usuario {
-    int id;
+    string id;
     string nombre;
     string apellido;
     string email;
 };
 
-// Función para imprimir los datos de un usuario
-void imprimirUsuario(Usuario usuario) {
+void imprimirUsuario(const Usuario& usuario) {
     cout << "ID: " << usuario.id << endl;
     cout << "Nombre: " << usuario.nombre << endl;
     cout << "Apellido: " << usuario.apellido << endl;
     cout << "Email: " << usuario.email << endl;
 }
 
-// Función para ejecutar una consulta SQL
-int ejecutarConsulta(sqlite3* db, string consulta, int(*callback)(void*, int, char**, char**), void* datos = nullptr) {
+int ejecutarConsulta(sqlite3* db, const string& consulta, int(*callback)(void*, int, char**, char**), void* datos = nullptr) {
     char* mensajeError;
     int resultado = sqlite3_exec(db, consulta.c_str(), callback, datos, &mensajeError);
     if (resultado != SQLITE_OK) {
@@ -30,8 +27,7 @@ int ejecutarConsulta(sqlite3* db, string consulta, int(*callback)(void*, int, ch
     return resultado;
 }
 
-// Función para obtener el último ID insertado en la tabla Usuarios
-int obtenerUltimoID(sqlite3* db) {
+string obtenerNuevoID(sqlite3* db) {
     int ultimoID = 0;
     string consulta = "SELECT MAX(id) FROM Usuarios";
     ejecutarConsulta(db, consulta, [](void* datos, int numColumnas, char** columnas, char** nombresColumnas) {
@@ -40,15 +36,12 @@ int obtenerUltimoID(sqlite3* db) {
         }
         return 0;
     }, &ultimoID);
-    return ultimoID;
+    return to_string(ultimoID + 1);
 }
 
-// Función para insertar un nuevo usuario en la tabla Usuarios
 void altaUsuario(sqlite3* db) {
     Usuario nuevoUsuario;
-    cout << "Introduce el ID del usuario: ";
-    cin >> nuevoUsuario.id;
-    cin.ignore(); // Ignorar el salto de línea pendiente en el buffer de entrada
+    nuevoUsuario.id = obtenerNuevoID(db);
     cout << "Introduce el nombre del usuario: ";
     getline(cin, nuevoUsuario.nombre);
     cout << "Introduce el apellido del usuario: ";
@@ -56,21 +49,20 @@ void altaUsuario(sqlite3* db) {
     cout << "Introduce el email del usuario: ";
     getline(cin, nuevoUsuario.email);
 
-    string consulta = "INSERT INTO Usuarios (id, nombre, apellido, email) VALUES (" +
-        to_string(nuevoUsuario.id) + ", '" + nuevoUsuario.nombre + "', '" +
+    string consulta = "INSERT INTO Usuarios (id, nombre, apellido, email) VALUES ('" +
+        nuevoUsuario.id + "', '" + nuevoUsuario.nombre + "', '" +
         nuevoUsuario.apellido + "', '" + nuevoUsuario.email + "')";
     if (ejecutarConsulta(db, consulta, nullptr) == SQLITE_OK) {
         cout << "Usuario agregado correctamente" << endl;
     }
 }
 
-// Función para eliminar un usuario de la tabla Usuarios
 void bajaUsuario(sqlite3* db) {
-    int idUsuario;
+    string idUsuario;
     cout << "Introduce el ID del usuario que quieres eliminar: ";
-    cin >> idUsuario;
+    getline(cin, idUsuario);
 
-    string consulta = "DELETE FROM Usuarios WHERE id = " + to_string(idUsuario);
+    string consulta = "DELETE FROM Usuarios WHERE id = '" + idUsuario + "'";
     if (ejecutarConsulta(db, consulta, nullptr) == SQLITE_OK) {
         if (sqlite3_changes(db) > 0) {
             cout << "Usuario eliminado correctamente" << endl;
@@ -80,18 +72,16 @@ void bajaUsuario(sqlite3* db) {
     }
 }
 
-// Función para modificar los datos de un usuario en la tabla
 void modificarUsuario(sqlite3* db) {
-    int idUsuario;
+    string idUsuario;
     cout << "Introduce el ID del usuario que quieres modificar: ";
-    cin >> idUsuario;
-    cin.ignore(); // Ignorar el salto de línea pendiente en el buffer de entrada
+    getline(cin, idUsuario);
 
-    string consulta = "SELECT * FROM Usuarios WHERE id = " + to_string(idUsuario);
+    string consulta = "SELECT * FROM Usuarios WHERE id = '" + idUsuario + "'";
     Usuario usuarioExistente;
     ejecutarConsulta(db, consulta, [](void* datos, int numColumnas, char** columnas, char** nombresColumnas) {
         if (columnas[0]) {
-            ((Usuario*)datos)->id = stoi(columnas[0]);
+            ((Usuario*)datos)->id = columnas[0];
         }
         if (columnas[1]) {
             ((Usuario*)datos)->nombre = columnas[1];
@@ -105,7 +95,7 @@ void modificarUsuario(sqlite3* db) {
         return 0;
     }, &usuarioExistente);
 
-    if (usuarioExistente.id == 0) {
+    if (usuarioExistente.id.empty()) {
         cout << "No se encontró ningún usuario con ese ID" << endl;
         return;
     }
@@ -132,7 +122,7 @@ void modificarUsuario(sqlite3* db) {
     consulta = "UPDATE Usuarios SET nombre = '" + nuevoUsuario.nombre +
         "', apellido = '" + nuevoUsuario.apellido +
         "', email = '" + nuevoUsuario.email +
-        "' WHERE id = " + to_string(idUsuario);
+        "' WHERE id = '" + idUsuario + "'";
     if (ejecutarConsulta(db, consulta, nullptr) == SQLITE_OK) {
         if (sqlite3_changes(db) > 0) {
             cout << "Usuario modificado correctamente" << endl;
@@ -142,10 +132,9 @@ void modificarUsuario(sqlite3* db) {
     }
 }
 
-// Función para mostrar todos los usuarios en la tabla Usuarios
 int callbackMostrarUsuarios(void* datos, int numColumnas, char** columnas, char** nombresColumnas) {
     Usuario usuario;
-    usuario.id = stoi(columnas[0]);
+    usuario.id = columnas[0];
     usuario.nombre = columnas[1];
     usuario.apellido = columnas[2];
     usuario.email = columnas[3];
@@ -159,7 +148,6 @@ void consultarUsuarios(sqlite3* db) {
     ejecutarConsulta(db, consulta, callbackMostrarUsuarios);
 }
 
-// Función para inicializar la base de datos
 sqlite3* inicializarBD() {
     sqlite3* db;
     int resultado = sqlite3_open("usuarios.db", &db);
@@ -168,7 +156,7 @@ sqlite3* inicializarBD() {
         return nullptr;
     }
 
-    string crearTabla = "CREATE TABLE IF NOT EXISTS Usuarios (id INTEGER PRIMARY KEY, nombre TEXT, apellido TEXT, email TEXT);";
+    string crearTabla = "CREATE TABLE IF NOT EXISTS Usuarios (id TEXT PRIMARY KEY, nombre TEXT, apellido TEXT, email TEXT);";
     if (ejecutarConsulta(db, crearTabla, nullptr) != SQLITE_OK) {
         cout << "Error al crear la tabla Usuarios" << endl;
         sqlite3_close(db);
